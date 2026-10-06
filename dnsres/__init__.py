@@ -1,0 +1,41 @@
+"""dnsres -- a deterministic recursive resolver kernel."""
+
+from .core import (
+    A,
+    AAAA,
+    CNAME,
+    NOERROR,
+    NXDOMAIN,
+    TCP,
+    UDP,
+    Answer,
+    CacheEntry,
+    ChainTooDeep,
+    Clock,
+    CnameLoop,
+    Record,
+    Reply,
+    ResolutionError,
+    ResolverCore,
+    Upstream,
+)
+
+__all__ = [
+    "A",
+    "AAAA",
+    "CNAME",
+    "NOERROR",
+    "NXDOMAIN",
+    "TCP",
+    "UDP",
+    "Answer",
+    "CacheEntry",
+    "ChainTooDeep",
+    "Clock",
+    "CnameLoop",
+    "Record",
+    "Reply",
+    "ResolutionError",
+    "ResolverCore",
+    "Upstream",
+]
