@@ -51,7 +51,7 @@ class ChainTooDeep(ResolutionError):
 
 def canonical(name):
     """Normalise a domain name so that it can be used as a lookup key."""
-    return str(name).strip().rstrip(".")
+    return str(name).strip().rstrip(".").lower()
 
 
 # --------------------------------------------------------------------------- time
@@ -234,10 +234,11 @@ class ResolverCore:
     def _question(self, qname, rtype, shared):
         name = canonical(qname)
         rtype = str(rtype).upper()
-        if name in shared:
-            return shared[name]
-        answer = self._answer((name, rtype), 0, frozenset())
-        shared[name] = answer
+        key = (name, rtype)
+        if key in shared:
+            return shared[key]
+        answer = self._answer(key, 0, frozenset())
+        shared[key] = answer
         return answer
 
     # ------------------------------------------------------------------ cache
@@ -246,8 +247,10 @@ class ResolverCore:
         """Answer a question from the cache when the entry is still usable."""
         now = self.clock.now()
         entry = self.cache.get(key)
-        if entry is not None and now <= entry.expires_at:
-            return Answer(key[0], key[1], entry.rcode, list(entry.records), True)
+        if entry is not None and now < entry.expires_at:
+            elapsed = now - entry.stored_at
+            records = [record.with_ttl(record.ttl - elapsed) for record in entry.records]
+            return Answer(key[0], key[1], entry.rcode, records, True)
         return self._fetch(key, depth, seen)
 
     def _fetch(self, key, depth, seen):
@@ -259,13 +262,14 @@ class ResolverCore:
         reply = self._exchange(name, rtype)
         now = self.clock.now()
         if reply.rcode == NXDOMAIN:
+            self._store(key, NXDOMAIN, [], self.negative_ttl, now)
             return Answer(name, rtype, NXDOMAIN, [], False)
         records = list(reply.records)
         target = self._cname_target(name, records)
         if target is not None and rtype != CNAME:
-            tail = self._answer((canonical(target), rtype), depth + 1, seen)
+            tail = self._answer((canonical(target), rtype), depth + 1, seen | {name})
             records.extend(tail.records)
-        ttl = records[-1].ttl if records else self.negative_ttl
+        ttl = min(record.ttl for record in records) if records else self.negative_ttl
         self._store(key, NOERROR, records, ttl, now)
         return Answer(name, rtype, NOERROR, records, False)
 
@@ -273,7 +277,7 @@ class ResolverCore:
         """Ask the upstream, retrying over TCP when the answer is truncated."""
         reply = self.upstream.ask(name, rtype, UDP)
         if reply.truncated:
-            self.upstream.ask(name, rtype, TCP)
+            return self.upstream.ask(name, rtype, TCP)
         return reply
 
     @staticmethod
